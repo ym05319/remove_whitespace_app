@@ -5,8 +5,9 @@ import numpy as np
 import cv2
 from PIL import Image
 import io
+import zipfile
 
-st.title("画像の余白一括削除アプリ（しきい値調整＋保存）")
+st.title("画像の余白一括削除アプリ（ZIP一括ダウンロード対応）")
 
 def remove_whitespace(pil_image, threshold_value):
     img = np.array(pil_image.convert("RGB"))
@@ -31,22 +32,25 @@ uploaded_files = st.file_uploader(
 if uploaded_files:
     st.write(f"{len(uploaded_files)} 枚の画像を処理します（しきい値：{threshold}）。")
 
-    for uploaded_file in uploaded_files:
-        image = Image.open(uploaded_file)
-        trimmed_image = remove_whitespace(image, threshold)
+    # ZIP用のバッファ
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zip_file:
+        for uploaded_file in uploaded_files:
+            image = Image.open(uploaded_file)
+            trimmed_image = remove_whitespace(image, threshold)
 
-        # 表示
-        st.image(trimmed_image, caption=f"{uploaded_file.name}（余白削除後）", use_column_width=True)
+            # 表示
+            st.image(trimmed_image, caption=f"{uploaded_file.name}（余白削除後）", use_column_width=True)
 
-        # ダウンロード用にバイト変換
-        buf = io.BytesIO()
-        trimmed_image.save(buf, format="PNG")
-        byte_im = buf.getvalue()
+            # 個別ファイル保存（メモリ内）
+            img_bytes = io.BytesIO()
+            trimmed_image.save(img_bytes, format="PNG")
+            zip_file.writestr(f"trimmed_{uploaded_file.name}", img_bytes.getvalue())
 
-        # ダウンロードボタン
-        st.download_button(
-            label=f"「{uploaded_file.name}」をダウンロード",
-            data=byte_im,
-            file_name=f"trimmed_{uploaded_file.name}",
-            mime="image/png"
-        )
+    zip_buffer.seek(0)
+    st.download_button(
+        label="一括ダウンロード（ZIP形式）",
+        data=zip_buffer,
+        file_name="trimmed_images.zip",
+        mime="application/zip"
+    )
